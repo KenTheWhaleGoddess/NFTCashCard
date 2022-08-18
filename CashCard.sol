@@ -2,6 +2,9 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "./ERC721A.sol";
@@ -14,6 +17,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
   uint256 counter;
 
   mapping(uint256 => mapping(ERC20 => uint256)) public balances;
+  mapping(uint256 => uint256) public ethBalances;
   mapping(uint256 => EnumerableSet.AddressSet) tokensInNFT;
   mapping(uint256 => uint256) public sellableAt;
   mapping(ERC20 => bool) public approvedTokens;    
@@ -47,7 +51,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     }
   }
 
-  function sendTokenToNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount) nonReentrant public {
+  function sendTokensToNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount) nonReentrant public payable {
     require(_exists(tokenId), "token doesnt exist");
     for(uint256 i = 0; i < tokens.length; i++) {  
       require(approvedTokens[tokens[i]], "not an approved token");
@@ -57,8 +61,12 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       }
       balances[tokenId][tokens[i]] += amount;
     }
+    if(msg.value > 0) {
+      ethBalances[tokenId] += msg.value;
+    }
   }
-  function withdrawTokenFromNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount, address _receiver) public onlyOwnerOf(tokenId) cannotSellToken(tokenId){
+  function withdrawTokensFromNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount, uint256 ethAmount, address _receiver) public onlyOwnerOf(tokenId) cannotSellToken(tokenId){
+    require(_receiver != address(0));
     for(uint256 i = 0; i < tokens.length; i++) {
       require(balances[tokenId][tokens[i]] >= amount, "not enough to withdraw that");
       require(amount > 0, "cannot withdraw nothing");
@@ -69,7 +77,11 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
         tokensInNFT[tokenId].remove((address(tokens[i])));
       }
     }
-  }
+    if(ethAmount > 0) {
+      require(ethBalances[tokenId] >= ethAmount, "taking out too much");
+      ethBalances[tokenId] -= ethAmount;
+    }
+   }
 
   function enableSelling(uint256 tokenId) external onlyOwnerOf(tokenId) {
     sellableAt[tokenId] = block.timestamp + 3 hours;
@@ -88,6 +100,8 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       string memory parts;
       parts = '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350"><style>.base { fill: white; font-family: serif; font-size: 14px; }</style><rect width="100%" height="100%" fill="0x4E9231"/><text x="10" y="20" class="base">';
 
+      parts = string(abi.encodePacked(parts, "ETH balance is ", ethBalances[tokenId] / (2**18), '</text><text x="10" y="40" class="base">'));
+
       for (uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
         ERC20 token = ERC20(tokensInNFT[tokenId].at(i));
         uint256 nodecimals = (balances[tokenId][token] / token.decimals());
@@ -99,41 +113,47 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       } else {
         parts = string(abi.encodePacked("This token is locked and unbuyable!", '</text><text x="10" y="40" class="base">'));
       }
+
+
       string memory output = string(abi.encodePacked(parts, '</text></svg>'));
 
       string memory json = Base64.encode(bytes(string(abi.encodePacked('{"name": "NFT Cash Card #', tokenId.toString(), ' (V1)", "description": "This NFT cash card is a fully on-chain representation of assets managed by the NFT smart contract. NFTs have balances, can be withdrawn from by the owner. It currently holds ', tokensInNFT[tokenId].length().toString(), ' types of ERC20s. It is made as a free mint to demonstrate NFT Utility.", "image": "data:image/svg+xml;base64,', Base64.encode(bytes(output)), '"}'))));
       output = string(abi.encodePacked('data:application/json;base64,', json));
 
       return output;
-    }
+  }
 
-    function getTokensInNFT(uint256 tokenId) external view returns (address[] memory result) {
-      for(uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
-        result[i] = (tokensInNFT[tokenId].at(i));
-      }
-    }
+  receive() external payable {
+    revert('dont send eth');
+  }
 
-    function toggleApprovedToken(address _token) external {
-      require(msg.sender == 0x1B3FEA07590E63Ce68Cb21951f3C133a35032473, "not approver");
-      ERC20 token = ERC20(_token);
-      approvedTokens[token] = !approvedTokens[token];
+  function getTokensInNFT(uint256 tokenId) external view returns (address[] memory result) {
+    for(uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
+      result[i] = (tokensInNFT[tokenId].at(i));
     }
+  }
 
-    function safeTransferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
-      return super.safeTransferFrom(from, to, tokenId);
-    }
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public override canSellToken(tokenId) {
+  function toggleApprovedToken(address _token) external {
+    require(msg.sender == 0x1B3FEA07590E63Ce68Cb21951f3C133a35032473, "not approver");
+    ERC20 token = ERC20(_token);
+    approvedTokens[token] = !approvedTokens[token];
+  }
 
-      return super.safeTransferFrom(from, to, tokenId, data);
-    }
-    function transferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
-      return super.transferFrom(from, to, tokenId);
-    }
+  function safeTransferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
+    return super.safeTransferFrom(from, to, tokenId);
+  }
+  function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public override canSellToken(tokenId) {
 
-    function name() public pure override returns (string memory) {
-      return "NFT Cash Card v1";
-    }
-    function symbol() public pure override returns (string memory) {
-      return "$$$";
-    }
+    return super.safeTransferFrom(from, to, tokenId, data);
+  }
+  function transferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
+    return super.transferFrom(from, to, tokenId);
+  }
+
+  function name() public pure override returns (string memory) {
+    return "NFT Cash Card v1";
+  }
+  function symbol() public pure override returns (string memory) {
+    return "$$$";
+  }
 }
