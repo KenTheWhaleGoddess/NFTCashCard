@@ -22,6 +22,8 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
   mapping(uint256 => uint256) public sellableAt;
   mapping(ERC20 => bool) public approvedTokens;    
 
+  uint256 public maxNftSupply;
+
   mapping(address => uint256) mintedTokens;
 
   modifier onlyOwnerOf(uint256 tokenId) {
@@ -42,7 +44,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
   // public
   function mint(uint256 _count) public {
     require(mintedTokens[msg.sender] + _count < 11, "10 is the max at a time");
-    require(counter + _count < 10000, "not enough remaining!");
+    require(counter + _count < maxNftSupply, "not enough remaining!");
 
     _safeMint(msg.sender, _count);
     unchecked {
@@ -51,23 +53,24 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     }
   }
 
-  function sendTokensToNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount) nonReentrant public payable {
+  function sendTokensToNFT(uint256 tokenId, ERC20[] calldata tokens, uint256[] calldata amounts) nonReentrant public payable {
     require(_exists(tokenId), "token doesnt exist");
     for(uint256 i = 0; i < tokens.length; i++) {  
       require(approvedTokens[tokens[i]], "not an approved token");
-      tokens[i].transferFrom(msg.sender, address(this), amount);
+      tokens[i].transferFrom(msg.sender, address(this), amounts[i]);
       if(balances[tokenId][tokens[i]] == 0) { //add to set
         tokensInNFT[tokenId].add((address(tokens[i])));
       }
-      balances[tokenId][tokens[i]] += amount;
+      balances[tokenId][tokens[i]] += amounts[i];
     }
     if(msg.value > 0) {
       ethBalances[tokenId] += msg.value;
     }
   }
-  function withdrawTokensFromNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount, uint256 ethAmount, address _receiver) public onlyOwnerOf(tokenId) cannotSellToken(tokenId){
+  function withdrawTokensFromNFT(uint256 tokenId, ERC20[] calldata tokens, uint256[] calldata amounts, uint256 ethAmount, address _receiver) public onlyOwnerOf(tokenId) cannotSellToken(tokenId){
     require(_receiver != address(0));
     for(uint256 i = 0; i < tokens.length; i++) {
+      uint256 amount = amounts[i];
       require(balances[tokenId][tokens[i]] >= amount, "not enough to withdraw that");
       require(amount > 0, "cannot withdraw nothing");
 
@@ -99,8 +102,10 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       require(_exists(tokenId),"ERC721Metadata: URI query for nonexistent token");
       string memory parts;
       parts = '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350"><style>.base { fill: white; font-family: serif; font-size: 14px; }</style><rect width="100%" height="100%" fill="0x4E9231"/><text x="10" y="20" class="base">';
+      uint256 nodecimals = (ethBalances[tokenId] / (2**18));
+      uint256 decimals = (ethBalances[tokenId] % (2**18)/ 16);
 
-      parts = string(abi.encodePacked(parts, "ETH balance is ", ethBalances[tokenId] / (2**18), '</text><text x="10" y="40" class="base">'));
+      parts = string(abi.encodePacked(parts, "ETH balance is ", ethBalances[tokenId] / (2**18), '.', decimals, '</text><text x="10" y="40" class="base">'));
 
       for (uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
         ERC20 token = ERC20(tokensInNFT[tokenId].at(i));
@@ -138,12 +143,16 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     ERC20 token = ERC20(_token);
     approvedTokens[token] = !approvedTokens[token];
   }
+  function setMaxNftSupply(uint256 supply) external {
+    require(msg.sender == 0x1B3FEA07590E63Ce68Cb21951f3C133a35032473, "not approver");
+    require(supply > totalSupply(), "too low");
+    maxNftSupply = supply;
+  }
 
   function safeTransferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
     return super.safeTransferFrom(from, to, tokenId);
   }
   function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public override canSellToken(tokenId) {
-
     return super.safeTransferFrom(from, to, tokenId, data);
   }
   function transferFrom(address from, address to, uint256 tokenId) public override canSellToken(tokenId) {
@@ -151,7 +160,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
   }
 
   function name() public pure override returns (string memory) {
-    return "NFT Cash Card v1";
+    return "Crypto Cash Card v1";
   }
   function symbol() public pure override returns (string memory) {
     return "$$$";
