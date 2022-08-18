@@ -16,6 +16,7 @@ contract NFTsThatCanOwnTokens is ERC721A("NFT Cash Card V1", "$$$"), Ownable, Re
 
   mapping(uint256 => mapping(ERC20 => uint256)) balances;
   mapping(uint256 => EnumerableSet.AddressSet) tokensInNFT;
+  mapping(uint256 => uint256) withdrawableAt;
   mapping(ERC20 => bool) approvedTokens;    
 
   modifier onlyOwnerOf(uint256 tokenId) {
@@ -28,6 +29,14 @@ contract NFTsThatCanOwnTokens is ERC721A("NFT Cash Card V1", "$$$"), Ownable, Re
     require(approvedTokens[token], "Not approved");
     _;
   }
+  modifier withdrawableToken(uint256 tokenId) {
+    require(withdrawableAt[tokenId] > block.timestamp, "Not approved");
+    _;
+  }
+  modifier notWithdrawableToken(uint256 tokenId) {
+    require(withdrawableAt[tokenId] < block.timestamp, "Not approved");
+    _;
+  }
 
   // public
   function mint(uint256 _count) public {
@@ -38,9 +47,9 @@ contract NFTsThatCanOwnTokens is ERC721A("NFT Cash Card V1", "$$$"), Ownable, Re
     counter += _count;
   }
 
-  function sendTokenToNFT(uint256 tokenId, ERC20 token, uint256 amount) nonReentrant approvedToken(token) public {
+  function sendTokenToNFT(uint256 tokenId, ERC20 token, uint256 amount) nonReentrant approvedToken(token) onlyOwnerOf(tokenId) public {
     require(token.allowance(msg.sender, address(token)) >= amount, "Not approved to spend");
-    
+    require(approvedTokens[token], "not an approved token");
     token.transferFrom(msg.sender, address(this), amount);
     if(balances[tokenId][token] == 0) { //add to set
       tokensInNFT[tokenId].add((address(token)));
@@ -50,11 +59,17 @@ contract NFTsThatCanOwnTokens is ERC721A("NFT Cash Card V1", "$$$"), Ownable, Re
   function withdrawTokenFromNFT(uint256 tokenId, ERC20 token, uint256 amount) public approvedToken(token) onlyOwnerOf(tokenId) {
     require(balances[tokenId][token] >= amount, "not enough to withdraw that");
     require(amount > 0, "cannot withdraw nothing");
+    require(withdrawableAt[tokenId] > block.timestamp, "token not withdrawable yet");
+
     token.transfer(msg.sender, amount);
     balances[tokenId][token] -= amount;
     if(balances[tokenId][token] == 0) { //add to set
       tokensInNFT[tokenId].remove((address(token)));
     }
+  }
+
+  function startWithdrawableTimer(uint256 tokenId) external onlyOwnerOf(tokenId) {
+    withdrawableAt[tokenId] = block.timestamp + 7 days;
   }
   
   function balanceOfAt(uint256 tokenId, ERC20 token) public view returns (uint256) {
@@ -77,5 +92,20 @@ contract NFTsThatCanOwnTokens is ERC721A("NFT Cash Card V1", "$$$"), Ownable, Re
         output = string(abi.encodePacked('data:application/json;base64,', json));
 
         return output;
+    }
+
+    function toggleApprovedToken(address _token) external onlyOwner {
+      ERC20 token = ERC20(_token);
+      approvedTokens[token] = !approvedTokens[token];
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) public override withdrawableToken(tokenId) {
+      return super.safeTransferFrom(from, to, tokenId);
+    }
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public override withdrawableToken(tokenId) {
+      return super.safeTransferFrom(from, to, tokenId, data);
+    }
+    function transferFrom(address from, address to, uint256 tokenId) public override withdrawableToken(tokenId) {
+      return super.transferFrom(from, to, tokenId);
     }
 }
