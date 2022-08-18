@@ -110,14 +110,14 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       }
       parts = string(abi.encodePacked('<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350"><style>.base { fill: white; font-family: serif; font-size: 14px; }</style><rect width="100%" height="100%" fill="',color,'"/><text x="10" y="20" class="base">'));
       uint256 nodecimals = (ethBalances[tokenId] / 10**18);
-      uint256 decimals = (ethBalances[tokenId] % 10**18/ 10**16);
+      uint256 decimals = (ethBalances[tokenId] % 10**18/ 10**17);
 
       parts = string(abi.encodePacked(parts, "ETH balance is ", nodecimals.toString(), '.', decimals.toString(), '</text><text x="10" y="40" class="base">'));
 
       for (uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
         ERC20 token = ERC20(tokensInNFT[tokenId].at(i));
         uint256 nodecimals = (balances[tokenId][token] / 10**18);
-        uint256 decimals = ((balances[tokenId][token] % 10**18 )/ 10**16);
+        uint256 decimals = ((balances[tokenId][token] % 10**18 )/ 10**17);
         parts = string(abi.encodePacked(parts, "balance is ", (nodecimals == 0 ? "<1" : nodecimals.toString()), " ", token.symbol(), '</text><text x="10" y="40" class="base">'));
       }
       if(isSellable) {
@@ -126,7 +126,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
         parts = string(abi.encodePacked(parts, "This token is locked and unbuyable!", '</text></svg>'));
       }
 
-      string memory json = Base64.encode(bytes(string(abi.encodePacked('{"name": "Crypto Cash Card #', tokenId.toString(), ' (V1)", "description": "This NFT cash card is a fully on-chain representation of assets managed by the NFT smart contract. NFTs have balances, can be withdrawn from by the owner. It currently holds ', tokensInNFT[tokenId].length().toString(), ' types of ERC20s. It is made as a free mint to demonstrate NFT Utility.", "image": "data:image/svg+xml;base64,', Base64.encode(bytes(parts)), '"}'))));
+      string memory json = Base64.encode(bytes(string(abi.encodePacked('{"name": "Crypto Cash Card #', tokenId.toString(), '", "description": "This NFT cash card is a fully on-chain representation of assets managed by the NFT smart contract. NFTs have balances, can be withdrawn from by the owner. It currently holds ', tokensInNFT[tokenId].length().toString(), ' types of ERC20s and ', ethBalances[tokenId] > 0 ? 'ETH.' : 'no ETH.',' It is made as a free mint to demonstrate NFT Utility.", "attributes": [{"trait_type": "Sellable", "value": "', isSellable ? 'Yes':'No', '"}],"image": "data:image/svg+xml;base64,', Base64.encode(bytes(parts)), '"}'))));
       string memory output = string(abi.encodePacked('data:application/json;base64,', json));
 
       return output;
@@ -148,7 +148,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     approvedTokens[token] = !approvedTokens[token];
   }
   function setMaxNftSupply(uint256 supply) external {
-    //require(msg.sender == 0x1B3FEA07590E63Ce68Cb21951f3C133a35032473, "not approver");
+    require(msg.sender == 0x1B3FEA07590E63Ce68Cb21951f3C133a35032473, "not approver");
     require(supply > totalSupply(), "too low");
     maxNftSupply = supply;
   }
