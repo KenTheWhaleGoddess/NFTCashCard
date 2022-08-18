@@ -25,11 +25,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     require(msg.sender == ownerOf(tokenId), "Token not owned by caller");
     _;
   }
-
-  modifier approvedToken(ERC20 token) {
-    require(approvedTokens[token], "Not approved token");
-    _;
-  }
+  
   modifier cannotSellToken(uint256 tokenId) {
     require(sellableAt[tokenId] == 0 || sellableAt[tokenId] > block.timestamp, "can send/sell token!");
     _;
@@ -51,23 +47,27 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     }
   }
 
-  function sendTokenToNFT(uint256 tokenId, ERC20 token, uint256 amount) nonReentrant approvedToken(token) onlyOwnerOf(tokenId) public {
-    require(approvedTokens[token], "not an approved token");
+  function sendTokenToNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount) nonReentrant public {
     require(_exists(tokenId), "token doesnt exist");
-    token.transferFrom(msg.sender, address(this), amount);
-    if(balances[tokenId][token] == 0) { //add to set
-      tokensInNFT[tokenId].add((address(token)));
+    for(uint256 i = 0; i < tokens.length; i++) {  
+      require(approvedTokens[tokens[i]], "not an approved token");
+      tokens[i].transferFrom(msg.sender, address(this), amount);
+      if(balances[tokenId][tokens[i]] == 0) { //add to set
+        tokensInNFT[tokenId].add((address(tokens[i])));
+      }
+      balances[tokenId][tokens[i]] += amount;
     }
-    balances[tokenId][token] += amount;
   }
-  function withdrawTokenFromNFT(uint256 tokenId, ERC20 token, uint256 amount) public approvedToken(token) onlyOwnerOf(tokenId) cannotSellToken(tokenId){
-    require(balances[tokenId][token] >= amount, "not enough to withdraw that");
-    require(amount > 0, "cannot withdraw nothing");
+  function withdrawTokenFromNFT(uint256 tokenId, ERC20[] calldata tokens, uint256 amount, address _receiver) public onlyOwnerOf(tokenId) cannotSellToken(tokenId){
+    for(uint256 i = 0; i < tokens.length; i++) {
+      require(balances[tokenId][tokens[i]] >= amount, "not enough to withdraw that");
+      require(amount > 0, "cannot withdraw nothing");
 
-    token.transfer(msg.sender, amount);
-    balances[tokenId][token] -= amount;
-    if(balances[tokenId][token] == 0) { //add to set
-      tokensInNFT[tokenId].remove((address(token)));
+      tokens[i].transfer(_receiver, amount);
+      balances[tokenId][tokens[i]] -= amount;
+      if(balances[tokenId][tokens[i]] == 0) { //add to set
+        tokensInNFT[tokenId].remove((address(tokens[i])));
+      }
     }
   }
 
