@@ -13,10 +13,10 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
 
   uint256 counter;
 
-  mapping(uint256 => mapping(ERC20 => uint256)) balances;
+  mapping(uint256 => mapping(ERC20 => uint256)) public balances;
   mapping(uint256 => EnumerableSet.AddressSet) tokensInNFT;
-  mapping(uint256 => uint256) sellableAt;
-  mapping(ERC20 => bool) approvedTokens;    
+  mapping(uint256 => uint256) public sellableAt;
+  mapping(ERC20 => bool) public approvedTokens;    
 
   mapping(address => uint256) mintedTokens;
 
@@ -105,6 +105,12 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
       output = string(abi.encodePacked('data:application/json;base64,', json));
 
       return output;
+    }
+
+    function getTokensInNFT(uint256 tokenId) external view returns (address[] memory result) {
+      for(uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
+        result[i] = (tokensInNFT[tokenId].at(i));
+      }
     }
 
     function toggleApprovedToken(address _token) external {
