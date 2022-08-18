@@ -25,7 +25,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
     require(msg.sender == ownerOf(tokenId), "Token not owned by caller");
     _;
   }
-  
+
   modifier cannotSellToken(uint256 tokenId) {
     require(sellableAt[tokenId] == 0 || sellableAt[tokenId] > block.timestamp, "can send/sell token!");
     _;
@@ -86,7 +86,7 @@ contract NFTsThatCanOwnTokens is ERC721A("", ""), ReentrancyGuard {
   function tokenURI(uint256 tokenId) override public view returns (string memory) {
       require(_exists(tokenId),"ERC721Metadata: URI query for nonexistent token");
       string memory parts;
-      parts = '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350"><style>.base { fill: white; font-family: serif; font-size: 14px; }</style><rect width="100%" height="100%" fill="0x542B72"/><text x="10" y="20" class="base">';
+      parts = '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350"><style>.base { fill: white; font-family: serif; font-size: 14px; }</style><rect width="100%" height="100%" fill="0x4E9231"/><text x="10" y="20" class="base">';
 
       for (uint256 i = 0; i < tokensInNFT[tokenId].length(); i++) {
         ERC20 token = ERC20(tokensInNFT[tokenId].at(i));
